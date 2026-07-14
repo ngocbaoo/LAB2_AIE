@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Deep Q vs Policy Gradient vs Actor-Critic — Demo</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="page-header">
+    <h1>So sánh Deep Q-Learning, Policy Gradient &amp; Actor-Critic</h1>
+    <p class="subtitle">Môi trường: <code>CartPole-v1</code> (Gym) — huấn luyện thực tế, biểu đồ cập nhật từ kết quả huấn luyện</p>
+  </header>
+
+  <main>
+    <section class="panel" id="core-diff">
+      <h2>1. Khác biệt cốt lõi: học giá trị vs. học chính sách</h2>
+      <div class="compare-grid">
+        <div class="compare-card value-based">
+          <h3>Deep Q-Network (DQN)<span class="tag">Value-based</span></h3>
+          <p>Học hàm giá trị hành động <strong>Q(s, a)</strong>: "hành động a ở trạng thái s tốt đến mức nào".</p>
+          <ul>
+            <li>Chính sách là <em>ngầm định</em>: chọn <code>argmax_a Q(s, a)</code></li>
+            <li>Off-policy, dùng Replay Buffer + Target Network</li>
+            <li>Hành động phải rời rạc (không sinh ra được xác suất liên tục)</li>
+            <li>Khám phá qua ε-greedy, tách rời khỏi việc học giá trị</li>
+          </ul>
+        </div>
+        <div class="compare-card policy-based">
+          <h3>Policy Gradient (REINFORCE)<span class="tag">Policy-based</span></h3>
+          <p>Học trực tiếp phân phối xác suất hành động <strong>π(a|s)</strong>, không qua bước trung gian Q(s,a).</p>
+          <ul>
+            <li>Chính sách <em>tường minh</em>, ngẫu nhiên (stochastic policy)</li>
+            <li>On-policy: phải thu thập lại dữ liệu sau mỗi lần cập nhật</li>
+            <li>Hỗ trợ cả hành động rời rạc và liên tục</li>
+            <li>Tín hiệu học là return cả episode → phương sai (variance) cao</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="actor-critic">
+      <h2>2. Actor-Critic: kết hợp cả hai</h2>
+      <div class="ac-explain">
+        <div class="ac-diagram" aria-hidden="true">
+          <div class="ac-box env-box">Môi trường<br /><small>state s, reward r</small></div>
+          <div class="ac-arrows">
+            <div class="arrow down">s</div>
+          </div>
+          <div class="ac-pair">
+            <div class="ac-box actor-box">
+              <strong>Actor</strong>
+              <small>π(a|s; θ)</small>
+              <p>Chọn hành động a</p>
+            </div>
+            <div class="ac-box critic-box">
+              <strong>Critic</strong>
+              <small>V(s; w)</small>
+              <p>Đánh giá trạng thái</p>
+            </div>
+          </div>
+          <div class="ac-arrows">
+            <div class="arrow up">advantage = r + γV(s') − V(s)</div>
+          </div>
+        </div>
+        <div class="ac-text">
+          <p><strong>Actor</strong> đóng vai trò giống policy gradient: xuất ra xác suất hành động và được cập nhật theo hướng tăng log-xác suất của hành động tốt.</p>
+          <p><strong>Critic</strong> đóng vai trò giống một Q-network thu nhỏ: học hàm giá trị trạng thái <strong>V(s)</strong> để ước lượng ngay lập tức "hành động vừa rồi tốt hơn hay tệ hơn kỳ vọng?" — gọi là <strong>advantage</strong>.</p>
+          <p>Nhờ Critic cung cấp tín hiệu advantage sau <em>từng bước</em> thay vì phải đợi hết episode như REINFORCE, Actor-Critic học ổn định hơn và cần ít episode hơn để hội tụ.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="training">
+      <h2>3. Minh họa quá trình huấn luyện</h2>
+      <div class="controls">
+        <label><input type="checkbox" class="series-toggle" data-series="DQN" checked /> DQN</label>
+        <label><input type="checkbox" class="series-toggle" data-series="REINFORCE" checked /> Policy Gradient</label>
+        <label><input type="checkbox" class="series-toggle" data-series="Actor-Critic" checked /> Actor-Critic</label>
+        <label class="raw-toggle"><input type="checkbox" id="show-raw" /> Hiện reward thô (mờ, chưa lọc)</label>
+      </div>
+
+      <div class="playback-bar">
+        <button id="play-btn" class="play-btn" type="button" aria-label="Phát">▶</button>
+        <button id="reset-btn" class="reset-btn" type="button" aria-label="Về đầu">⟲</button>
+        <input type="range" id="episode-slider" min="0" max="0" value="0" step="1" />
+        <span id="episode-label" class="episode-label">episode 0</span>
+        <select id="speed-select">
+          <option value="4">0.5×</option>
+          <option value="2" selected>1×</option>
+          <option value="1">2×</option>
+          <option value="0.4">5×</option>
+        </select>
+      </div>
+
+      <div class="live-stats" id="live-stats"></div>
+
+      <canvas id="reward-chart" width="1000" height="440"></canvas>
+      <p id="chart-status" class="status-msg"></p>
+    </section>
+
+    <section class="panel" id="metrics">
+      <h2>4. Bảng chỉ số đánh giá</h2>
+      <div class="table-wrap">
+        <table id="metrics-table">
+          <thead>
+            <tr>
+              <th>Thuật toán</th>
+              <th>Nhóm</th>
+              <th>Episode hội tụ<br /><small>(moving-avg ≥ 195)</small></th>
+              <th>Số bước env<br />để hội tụ</th>
+              <th>Reward TB<br />(20 ep cuối)</th>
+              <th>Độ lệch chuẩn<br />(20 ep cuối)</th>
+              <th>Reward tốt nhất</th>
+              <th>Thời gian train (s)</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Dữ liệu tại <code>frontend/data/results.json</code>, sinh bởi <code>backend/train.py</code>. Xem chi tiết trong thư mục <code>docs/</code>.</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
