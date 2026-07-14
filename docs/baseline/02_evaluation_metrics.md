@@ -1,19 +1,20 @@
 # Chỉ số đánh giá
 
-So sánh DQN, Policy Gradient và Actor-Critic công bằng đòi hỏi nhiều hơn một
-con số "reward cuối cùng" — ba họ thuật toán này có đặc tính hội tụ và độ ổn
-định khác nhau, nên hệ thống theo dõi các chỉ số sau (tính trong
+Đánh giá Actor-Critic công bằng giữa baseline và bản cải tiến GAE đòi hỏi
+nhiều hơn một con số "reward cuối cùng" — cập nhật online mỗi bước có thể học
+nhanh nhưng dao động, trong khi cập nhật theo GAE có thể ổn định hơn nhưng
+đánh đổi tốc độ, nên hệ thống theo dõi các chỉ số sau (tính trong
 `backend/train_all.py`, hiển thị ở bảng trong `frontend/index.html`).
 
 ## 0. Vì sao chạy 5 seed thay vì 1?
 
-Một lần chạy duy nhất không phân biệt được "thuật toán này tốt hơn" với "lần
-này may mắn hơn" — nhất là với REINFORCE, vốn có phương sai rất cao giữa các
-lần chạy. `train_all.py` chạy mỗi cấu hình trên **5 seed cố định** (42–46) và
-báo cáo **trung bình ± độ lệch chuẩn giữa các seed** cho mọi chỉ số bên dưới,
-thay vì một con số đơn lẻ. Đường trung bình trên biểu đồ đi kèm dải mờ ±1 std
-để thấy được mức độ dao động giữa các lần chạy, không chỉ dao động trong một
-lần chạy.
+Một lần chạy duy nhất không phân biệt được "cấu hình này tốt hơn" với "lần
+này may mắn hơn" — nhất là với môi trường nhiễu cao như `TradingEnv`.
+`train_all.py` chạy mỗi cấu hình (baseline, improved) trên **5 seed cố định**
+(42–46) và báo cáo **trung bình ± độ lệch chuẩn giữa các seed** cho mọi chỉ
+số bên dưới, thay vì một con số đơn lẻ. Đường trung bình trên biểu đồ đi kèm
+dải mờ ±1 std để thấy được mức độ dao động giữa các lần chạy, không chỉ dao
+động trong một lần chạy.
 
 ## Chỉ số bổ sung: Tỷ lệ hội tụ (`solved_rate`)
 
@@ -25,33 +26,39 @@ seed đã hội tụ).
 
 ## 1. Episode reward (`rewards`)
 
-Tổng reward thô của từng episode = số bước cột đứng vững trước khi đổ (tối đa
-500). Đây là dữ liệu gốc, nhiễu cao — dùng để vẽ đường mờ phía sau trên biểu đồ
-(bật bằng checkbox "Hiện reward thô").
+Tổng reward thô của từng episode = tổng **% lãi/lỗ** tích luỹ qua 200 bước
+giao dịch trong episode đó (có thể âm). Đây là dữ liệu gốc, nhiễu cao — dùng
+để vẽ đường mờ phía sau trên biểu đồ (bật bằng checkbox "Hiện reward thô").
 
 ## 2. Moving average (`moving_avg`, cửa sổ 20 episode)
 
 Trung bình trượt 20 episode gần nhất. Đây là đường chính trên biểu đồ vì phản
-ánh xu hướng học thực sự thay vì nhiễu từng episode — đặc biệt quan trọng với
-REINFORCE, vốn có phương sai episode-to-episode rất lớn.
+ánh xu hướng học thực sự thay vì nhiễu từng episode — đặc biệt quan trọng ở
+môi trường này vì reward episode-to-episode dao động rất lớn (mỗi episode là
+một chuỗi giá tổng hợp khác nhau).
 
 ## 3. Episode hội tụ (`solved_at_episode`, trung bình qua các seed đã hội tụ)
 
-Episode đầu tiên mà moving average vượt ngưỡng **195** (chọn thấp hơn ngưỡng
-chính thức 475 của CartPole-v1 vì ngân sách huấn luyện baseline chỉ 400
-episode — mục tiêu là so sánh *tốc độ học tương đối*, không phải đạt SOTA).
+Episode đầu tiên mà moving average vượt ngưỡng **2.0% lãi/episode**. Ngưỡng
+này được chọn dựa trên một chính sách tham chiếu đơn giản — "theo dấu return
+gần nhất" (long nếu return trước dương, short nếu âm) — đạt trung bình ~7.0%
+lãi/episode (nhưng std rất cao, ~15.8, vì tín hiệu momentum yếu và nhiễu lớn),
+trong khi chính sách "không làm gì" (Hold liên tục) luôn cho đúng 0%. Ngưỡng
+2.0% nằm giữa hai mốc đó: đủ cao để loại trừ chính sách trung lập/ăn may
+ngẫu nhiên, nhưng không đòi hỏi agent bắt được toàn bộ edge lý thuyết.
 
 → Đo **sample efficiency theo số episode**: thuật toán nào cần ít lần thử hơn
 để học được chính sách tốt.
 
 ## 4. Số bước môi trường để hội tụ (`env_steps_to_solve`)
 
-Tổng reward (= tổng số bước) cộng dồn từ episode 0 đến `solved_at_episode`.
+`(solved_at_episode + 1) × 200` — vì mỗi episode trong `TradingEnv` luôn dài
+đúng 200 bước cố định (khác CartPole, nơi reward trùng với số bước sống sót
+nên có thể cộng dồn trực tiếp).
 
 → Đo **sample efficiency theo số tương tác thực với môi trường** — chỉ số này
 quan trọng hơn số episode trong thực tế, vì mỗi bước môi trường có thể tốn
-kém (robot thật, giả lập vật lý nặng...). Một thuật toán hội tụ ở episode
-muộn hơn nhưng với episode ngắn (thất bại nhanh) có thể vẫn tốn ít bước hơn.
+kém (dữ liệu thị trường thật, chi phí giao dịch thật...).
 
 ## 5. Reward trung bình 20 episode cuối (`final_avg_reward_last20`, mean ± std qua 5 seed)
 
@@ -62,9 +69,10 @@ tốt hơn.
 ## 6. Độ lệch chuẩn 20 episode cuối (`final_std_reward_last20`)
 
 Đo **độ ổn định (stability)** của chính sách đã hội tụ. Std thấp = chính sách
-nhất quán; std cao = chính sách còn dao động dù trung bình đã cao — thường
-gặp ở REINFORCE do phương sai gradient lớn, và là điểm Actor-Critic được kỳ
-vọng cải thiện nhờ baseline V(s) làm giảm phương sai.
+nhất quán; std cao = chính sách còn dao động dù trung bình đã cao. Đây chính
+xác là chỉ số GAE được kỳ vọng cải thiện so với advantage 1-bước — bằng cách
+cân bằng bias/variance tốt hơn, advantage ít nhiễu hơn nên chính sách học
+được ổn định hơn.
 
 ## 7. Reward tốt nhất (`best_episode_reward`)
 
@@ -74,10 +82,10 @@ Giá trị cao nhất từng đạt được trong toàn bộ quá trình huấn
 ## 8. Thời gian huấn luyện (`training_time_sec`)
 
 Wall-clock time cho toàn bộ `n_episodes`, cùng phần cứng (đo bằng
-`time.perf_counter()` trong `train.py`). Phản ánh **chi phí tính toán thực
-tế**: DQN tốn thêm chi phí replay buffer + sample batch mỗi bước, trong khi
-REINFORCE/Actor-Critic cập nhật trực tiếp trên từng episode/bước nên đơn giản
-hơn nhưng có thể cần nhiều episode hơn để bù lại.
+`time.perf_counter()` trong `train_all.py`). Phản ánh **chi phí tính toán
+thực tế**: baseline cập nhật online sau mỗi bước (200 update/episode);
+GAE thu thập trọn 1 episode rồi mới cập nhật 1 lần — ít lần gọi optimizer
+hơn, nhưng thêm chi phí tính GAE lùi (backward) qua toàn bộ chuỗi reward.
 
 ## Vì sao dùng từng ấy chỉ số?
 
@@ -90,6 +98,6 @@ hơn nhưng có thể cần nhiều episode hơn để bù lại.
 | Tiềm năng tối đa của chính sách?               | `best_episode_reward`                  |
 | Chi phí tính toán để đạt được điều đó?         | `training_time_sec`                    |
 
-Không có thuật toán nào thắng tuyệt đối trên mọi chỉ số — đó chính là lý do
-cần nhìn cả bảng thay vì một con số duy nhất. Kết quả cụ thể và phân tích ở
-[`03_results.md`](./03_results.md).
+Không có phiên bản nào (baseline hay GAE) thắng tuyệt đối trên mọi chỉ số —
+đó chính là lý do cần nhìn cả bảng thay vì một con số duy nhất. Kết quả cụ
+thể và phân tích ở [`03_results.md`](./03_results.md).

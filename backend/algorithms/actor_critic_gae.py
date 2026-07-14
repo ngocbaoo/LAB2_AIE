@@ -35,10 +35,10 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.distributions import Categorical
-import gym
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from common import set_seed, RewardTracker
+from trading_env import TradingEnv
 
 
 class ActorCriticNetwork(nn.Module):
@@ -81,9 +81,9 @@ def train_actor_critic_gae(
     seed: int = 42,
 ):
     set_seed(seed)
-    env = gym.make("CartPole-v1")
-    obs_dim = env.observation_space.shape[0]
-    n_actions = env.action_space.n
+    env = TradingEnv()
+    obs_dim = env.obs_dim
+    n_actions = env.n_actions
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     net = ActorCriticNetwork(obs_dim, n_actions).to(device)
@@ -91,7 +91,7 @@ def train_actor_critic_gae(
     tracker = RewardTracker()
 
     for episode in range(n_episodes):
-        state, _ = env.reset(seed=seed + episode)
+        state = env.reset(seed=seed + episode)
         done = False
         log_probs, entropies, rewards, values = [], [], [], []
 
@@ -105,12 +105,11 @@ def train_actor_critic_gae(
             entropies.append(dist.entropy())
             values.append(value)
 
-            state, reward, terminated, truncated, _ = env.step(int(action.item()))
-            done = terminated or truncated
+            state, reward, done = env.step(int(action.item()))
             rewards.append(reward)
 
         with torch.no_grad():
-            bootstrap = torch.tensor(0.0, device=device)  # episode always ends (fall or truncation) -> no continuation value
+            bootstrap = torch.tensor(0.0, device=device)  # episode always ends at a fixed horizon -> no continuation value
         values_t = torch.cat([torch.stack(values), bootstrap.unsqueeze(0)])
         advantages, returns = compute_gae(rewards, values_t, gamma, lam)
         advantages = advantages.to(device)
@@ -132,7 +131,6 @@ def train_actor_critic_gae(
 
         tracker.add(sum(rewards))
 
-    env.close()
     return {
         "name": "Actor-Critic",
         "family": "actor-critic",

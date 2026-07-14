@@ -28,10 +28,18 @@ class RewardTracker:
             out.append(float(np.mean(self.rewards[lo:i + 1])))
         return out
 
-    def solved_at(self, threshold: float = 195.0):
-        """First episode index where the moving average crosses `threshold`, else None."""
+    def solved_at(self, threshold: float = 2.0):
+        """First episode index where the moving average crosses `threshold`, else None.
+
+        Only considers episodes once the moving-average window is fully
+        populated (i >= window - 1) -- otherwise a single lucky early episode
+        (moving_avg of just 1-2 episodes) could falsely trigger "solved" on
+        high-variance reward signals.
+        """
         ma = self.moving_avg
         for i, v in enumerate(ma):
+            if i < self.window - 1:
+                continue
             if v >= threshold:
                 return i
         return None

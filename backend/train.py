@@ -1,7 +1,8 @@
 """
-Trains DQN, REINFORCE (Policy Gradient) and Actor-Critic on CartPole-v1 with the
-same episode budget and seed, then exports a single JSON consumed by the
-frontend dashboard and referenced by docs/03_results.md.
+Trains Actor-Critic (baseline and GAE-improved) on TradingEnv (a
+synthetic-price trading-strategy problem, see backend/trading_env.py) with
+the same episode budget and seed -- a quick 1-seed sanity check. The
+authoritative 5-seed data source is train_all.py.
 
 Run:  py -3.11 train.py
 """
@@ -9,13 +10,13 @@ import json
 import os
 import time
 
-from algorithms.dqn import train_dqn
-from algorithms.reinforce import train_reinforce
 from algorithms.actor_critic import train_actor_critic
+from algorithms.actor_critic_gae import train_actor_critic_gae
 
 N_EPISODES = 400
 SEED = 42
-SOLVED_THRESHOLD = 195.0  # moving-average (window 20) episode reward
+SOLVED_THRESHOLD = 2.0  # moving-average (window 20) % return per episode
+ENV_EPISODE_LEN = 200  # TradingEnv.episode_len -- every episode has this fixed length
 OUT_PATH = os.path.join(os.path.dirname(__file__), "..", "frontend", "data", "results.json")
 
 
@@ -23,7 +24,7 @@ def summarize(result: dict, elapsed_s: float) -> dict:
     rewards = result["rewards"]
     solved_at = result["solved_at"]
     last_window = rewards[-20:]
-    steps_to_solve = sum(rewards[: solved_at + 1]) if solved_at is not None else None
+    steps_to_solve = (solved_at + 1) * ENV_EPISODE_LEN if solved_at is not None else None
 
     return {
         "name": result["name"],
@@ -48,9 +49,8 @@ def summarize(result: dict, elapsed_s: float) -> dict:
 def run_all():
     runs = []
     for label, fn in [
-        ("DQN", train_dqn),
-        ("REINFORCE", train_reinforce),
-        ("Actor-Critic", train_actor_critic),
+        ("Actor-Critic (Baseline)", train_actor_critic),
+        ("Actor-Critic + GAE", train_actor_critic_gae),
     ]:
         print(f"Training {label} for {N_EPISODES} episodes...")
         start = time.perf_counter()
@@ -62,7 +62,7 @@ def run_all():
         runs.append(summary)
 
     payload = {
-        "environment": "CartPole-v1",
+        "environment": "TradingEnv (synthetic GBM, window=10, episode_len=200)",
         "n_episodes": N_EPISODES,
         "seed": SEED,
         "solved_threshold": SOLVED_THRESHOLD,

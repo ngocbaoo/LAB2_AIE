@@ -1,8 +1,9 @@
 """
-Trains all 6 runs -- DQN/REINFORCE/Actor-Critic, each baseline AND improved --
-across multiple seeds, then exports one combined JSON consumed by the
-frontend (3 views: baseline comparison, improved comparison, per-algorithm
-before/after) and by docs/baseline/ + docs/improved/.
+Trains both Actor-Critic runs -- baseline (1-step advantage) AND improved
+(GAE(lambda=0.95)) -- on TradingEnv (backend/trading_env.py, a synthetic
+trading-strategy problem: Sell/Hold/Buy against a momentum-driven synthetic
+price series), across multiple seeds, then exports one combined JSON
+consumed by the frontend and by docs/baseline/ + docs/improved/.
 
 Run:  py -3.11 train_all.py
 """
@@ -12,25 +13,18 @@ import time
 
 import numpy as np
 
-from algorithms.dqn import train_dqn
-from algorithms.dqn_double import train_double_dqn
-from algorithms.reinforce import train_reinforce
-from algorithms.reinforce_improved import train_reinforce_improved
 from algorithms.actor_critic import train_actor_critic
 from algorithms.actor_critic_gae import train_actor_critic_gae
 
 N_EPISODES = 400
 SEEDS = [42, 43, 44, 45, 46]
-SOLVED_THRESHOLD = 195.0
+SOLVED_THRESHOLD = 2.0  # % loi nhuan trung binh (20 episode cuoi) -- xem trading_env.py
 SOLVED_WINDOW = 20
+ENV_EPISODE_LEN = 200  # TradingEnv.episode_len -- moi episode luon dai dung bang nay
 OUT_PATH = os.path.join(os.path.dirname(__file__), "..", "frontend", "data", "results.json")
 
 # (key, family, variant, label, train_fn)
 RUN_SPECS = [
-    ("DQN", "value-based", "baseline", "DQN (Baseline)", train_dqn),
-    ("DQN", "value-based", "improved", "Double DQN", train_double_dqn),
-    ("REINFORCE", "policy-based", "baseline", "REINFORCE (Baseline)", train_reinforce),
-    ("REINFORCE", "policy-based", "improved", "REINFORCE + Baseline + Entropy", train_reinforce_improved),
     ("Actor-Critic", "actor-critic", "baseline", "Actor-Critic (Baseline)", train_actor_critic),
     ("Actor-Critic", "actor-critic", "improved", "Actor-Critic + GAE", train_actor_critic_gae),
 ]
@@ -40,7 +34,9 @@ def per_seed_metrics(result: dict, elapsed_s: float, seed: int) -> dict:
     rewards = result["rewards"]
     solved_at = result["solved_at"]
     last_window = rewards[-SOLVED_WINDOW:]
-    steps_to_solve = sum(rewards[: solved_at + 1]) if solved_at is not None else None
+    # TradingEnv co do dai episode co dinh (khong nhu CartPole, noi reward == so
+    # buoc song sot); nen "so buoc env" chi la (so episode) x (do dai co dinh).
+    steps_to_solve = (solved_at + 1) * ENV_EPISODE_LEN if solved_at is not None else None
     mean_last = float(np.mean(last_window))
     std_last = float(np.std(last_window))
     return {
@@ -110,7 +106,7 @@ def run_all():
     runs = [run_one(*spec) for spec in RUN_SPECS]
 
     payload = {
-        "environment": "CartPole-v1",
+        "environment": "TradingEnv (synthetic GBM, window=10, episode_len=200)",
         "n_episodes": N_EPISODES,
         "seeds": SEEDS,
         "solved_threshold": SOLVED_THRESHOLD,

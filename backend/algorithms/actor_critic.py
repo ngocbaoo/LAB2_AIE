@@ -22,10 +22,10 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.distributions import Categorical
-import gym
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from common import set_seed, RewardTracker
+from trading_env import TradingEnv
 
 
 class ActorCriticNetwork(nn.Module):
@@ -55,9 +55,9 @@ def train_actor_critic(
     seed: int = 42,
 ):
     set_seed(seed)
-    env = gym.make("CartPole-v1")
-    obs_dim = env.observation_space.shape[0]
-    n_actions = env.action_space.n
+    env = TradingEnv()
+    obs_dim = env.obs_dim
+    n_actions = env.n_actions
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     net = ActorCriticNetwork(obs_dim, n_actions).to(device)
@@ -65,7 +65,7 @@ def train_actor_critic(
     tracker = RewardTracker()
 
     for episode in range(n_episodes):
-        state, _ = env.reset(seed=seed + episode)
+        state = env.reset(seed=seed + episode)
         done = False
         ep_reward = 0.0
 
@@ -75,8 +75,7 @@ def train_actor_critic(
             dist = Categorical(probs)
             action = dist.sample()
 
-            next_state, reward, terminated, truncated, _ = env.step(int(action.item()))
-            done = terminated or truncated
+            next_state, reward, done = env.step(int(action.item()))
             ep_reward += reward
 
             with torch.no_grad():
@@ -97,7 +96,6 @@ def train_actor_critic(
 
         tracker.add(ep_reward)
 
-    env.close()
     return {
         "name": "Actor-Critic",
         "family": "actor-critic",
