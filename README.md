@@ -1,12 +1,22 @@
-# Deep Q-Learning vs Policy Gradient vs Actor-Critic — Demo
+# Deep Q-Learning vs Policy Gradient vs Actor-Critic — Baseline &amp; Cải tiến
 
-So sánh trực quan ba thuật toán Reinforcement Learning trên `CartPole-v1`:
+So sánh trực quan ba thuật toán Reinforcement Learning trên `CartPole-v1`,
+theo hai giai đoạn:
 
-- **Deep Q-Network (DQN)** — học giá trị hành động Q(s, a) (value-based)
-- **REINFORCE (Policy Gradient)** — học trực tiếp phân phối xác suất hành động π(a|s) (policy-based)
-- **Actor-Critic** — Actor chọn hành động, Critic học V(s) để đánh giá hành động đó (advantage), kết hợp cả hai cách trên
+1. **Baseline** — cài đặt gốc của ba thuật toán
+   - **Deep Q-Network (DQN)** — học giá trị hành động Q(s, a) (value-based)
+   - **REINFORCE (Policy Gradient)** — học trực tiếp phân phối xác suất hành động π(a|s) (policy-based)
+   - **Actor-Critic** — Actor chọn hành động, Critic học V(s) để đánh giá hành động đó (advantage 1-bước)
+2. **Improved** — mỗi thuật toán được cải tiến nhắm đúng điểm yếu quan sát được ở baseline:
+   - **Double DQN** — giảm overestimation bias
+   - **REINFORCE + learned baseline + entropy bonus** — giảm variance, tránh hội tụ sớm rồi thoái lui
+   - **Actor-Critic + GAE(λ=0.95)** — cân bằng bias/variance tốt hơn advantage 1-bước
 
-Chi tiết kiến trúc, chỉ số đánh giá và phân tích kết quả nằm trong [`docs/`](./docs).
+Mọi cấu hình (cả baseline lẫn improved) được huấn luyện trên **5 seed** để so
+sánh đáng tin cậy hơn một lần chạy đơn lẻ.
+
+Chi tiết kiến trúc, chỉ số đánh giá và phân tích kết quả nằm trong
+[`docs/baseline/`](./docs/baseline) và [`docs/improved/`](./docs/improved).
 
 ## Yêu cầu
 
@@ -34,22 +44,32 @@ numpy>=1.24
 
 ```bash
 cd backend
+python train_all.py
+```
+
+Script này huấn luyện **cả 6 cấu hình** (DQN/REINFORCE/Actor-Critic ×
+baseline/improved), mỗi cấu hình trên **5 seed** × 400 episode, rồi ghi kết
+quả đã gộp (mean/std qua seed) ra `frontend/data/results.json` — file này là
+dữ liệu duy nhất mà frontend đọc. Chạy đủ mất khoảng 40-60 phút tùy phần
+cứng.
+
+Muốn kiểm tra nhanh (chỉ 1 seed, chỉ baseline, ~5-6 phút):
+
+```bash
 python train.py
 ```
 
-Script huấn luyện cả 3 thuật toán (mặc định 400 episode/thuật toán, seed 42)
-trên `CartPole-v1` và ghi kết quả ra `frontend/data/results.json` — file này
-là dữ liệu mà frontend đọc để vẽ biểu đồ và bảng chỉ số. Có thể chạy riêng lẻ
-từng thuật toán để thử nhanh, ví dụ:
+Hoặc chạy thử từng thuật toán riêng lẻ (train 50 episode, in moving-average
+cuối cùng ra console, không ghi JSON):
 
 ```bash
 python algorithms/dqn.py
+python algorithms/dqn_double.py
 python algorithms/reinforce.py
+python algorithms/reinforce_improved.py
 python algorithms/actor_critic.py
+python algorithms/actor_critic_gae.py
 ```
-
-(mỗi file khi chạy trực tiếp sẽ tự train 50 episode và in ra moving-average
-cuối cùng, dùng để kiểm tra nhanh code còn chạy được không, không ghi JSON.)
 
 ## Chạy frontend
 
@@ -68,11 +88,14 @@ Trang gồm:
 
 1. So sánh lý thuyết DQN vs Policy Gradient
 2. Sơ đồ giải thích Actor-Critic (Actor / Critic / advantage)
-3. **Minh họa quá trình huấn luyện** — biểu đồ reward có thể tua lại theo
-   từng episode: nút Play/Pause, thanh trượt tua, chọn tốc độ phát, và bảng
-   chỉ số trực tiếp (reward hiện tại + đã hội tụ hay chưa) cho từng thuật toán
-4. Bảng chỉ số đánh giá cuối cùng (episode hội tụ, reward trung bình, độ lệch
-   chuẩn, thời gian huấn luyện...)
+3. Tóm tắt các cải tiến áp dụng lên từng thuật toán
+4. Ba tab minh họa &amp; so sánh:
+   - **So sánh Baseline** — biểu đồ có thể tua lại theo episode (Play/Pause,
+     scrubber, tốc độ phát), dải mờ ±1 std giữa 5 seed, bảng chỉ số
+   - **So sánh Improved** — cùng giao diện, cho 3 phiên bản đã cải tiến
+   - **Trước / Sau theo thuật toán** — mỗi thuật toán một biểu đồ ghép
+     baseline (nét đứt) và improved (nét liền) để thấy trực tiếp cải tiến có
+     tác dụng hay không
 
 ## Cấu trúc thư mục
 
@@ -80,25 +103,37 @@ Trang gồm:
 Lab2_aie/
 ├── requirements.txt
 ├── backend/
-│   ├── common.py               # seeding + RewardTracker (moving average, solved_at)
+│   ├── common.py                    # seeding + RewardTracker (moving average, solved_at)
 │   ├── algorithms/
-│   │   ├── dqn.py
-│   │   ├── reinforce.py
-│   │   └── actor_critic.py
-│   └── train.py                 # huấn luyện cả 3, xuất frontend/data/results.json
+│   │   ├── dqn.py                   # Deep Q-Network (baseline)
+│   │   ├── reinforce.py             # Policy Gradient / REINFORCE (baseline)
+│   │   ├── actor_critic.py          # Actor-Critic 1-step (baseline)
+│   │   ├── dqn_double.py            # Double DQN (improved)
+│   │   ├── reinforce_improved.py    # REINFORCE + baseline + entropy (improved)
+│   │   └── actor_critic_gae.py      # Actor-Critic + GAE (improved)
+│   ├── train.py                      # 1 seed, chỉ baseline — kiểm tra nhanh
+│   └── train_all.py                  # 6 cấu hình x 5 seed — nguồn dữ liệu chính thức
 ├── frontend/
-│   ├── index.html
+│   ├── index.html                    # 3 tab: baseline / improved / trước-sau
 │   ├── style.css
 │   ├── app.js
-│   └── data/results.json         # sinh ra bởi backend/train.py, đọc bởi frontend
+│   └── data/results.json             # sinh ra bởi backend/train_all.py
 └── docs/
-    ├── 01_system_overview.md
-    ├── 02_evaluation_metrics.md
-    └── 03_results.md
+    ├── baseline/
+    │   ├── 01_system_overview.md
+    │   ├── 02_evaluation_metrics.md
+    │   └── 03_results.md
+    └── improved/
+        ├── 01_system_overview.md     # lý thuyết Double DQN / REINFORCE+baseline+entropy / AC+GAE
+        ├── 02_evaluation_metrics.md
+        └── 03_results.md             # 3 phép so sánh: baseline-3, improved-3, từng cặp trước/sau
 ```
 
 ## Tài liệu
 
-- [`docs/01_system_overview.md`](./docs/01_system_overview.md) — tổng quan hệ thống, kiến trúc, luồng dữ liệu
-- [`docs/02_evaluation_metrics.md`](./docs/02_evaluation_metrics.md) — giải thích các chỉ số đánh giá
-- [`docs/03_results.md`](./docs/03_results.md) — kết quả thực nghiệm và phân tích
+- [`docs/baseline/01_system_overview.md`](./docs/baseline/01_system_overview.md) — tổng quan hệ thống, kiến trúc, luồng dữ liệu
+- [`docs/baseline/02_evaluation_metrics.md`](./docs/baseline/02_evaluation_metrics.md) — giải thích các chỉ số đánh giá
+- [`docs/baseline/03_results.md`](./docs/baseline/03_results.md) — kết quả baseline và phân tích
+- [`docs/improved/01_system_overview.md`](./docs/improved/01_system_overview.md) — lý thuyết từng cải tiến
+- [`docs/improved/02_evaluation_metrics.md`](./docs/improved/02_evaluation_metrics.md) — 3 cách so sánh (baseline-3, improved-3, trước/sau)
+- [`docs/improved/03_results.md`](./docs/improved/03_results.md) — kết quả improved và so sánh trước/sau

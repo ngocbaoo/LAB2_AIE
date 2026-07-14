@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Deep Q vs Policy Gradient vs Actor-Critic — Demo</title>
+  <title>Deep Q vs Policy Gradient vs Actor-Critic — Baseline &amp; Cải tiến</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <header class="page-header">
     <h1>So sánh Deep Q-Learning, Policy Gradient &amp; Actor-Critic</h1>
-    <p class="subtitle">Môi trường: <code>CartPole-v1</code> (Gym) — huấn luyện thực tế, biểu đồ cập nhật từ kết quả huấn luyện</p>
+    <p class="subtitle">Môi trường: <code>CartPole-v1</code> (Gym) — mỗi cấu hình huấn luyện trên 5 seed, biểu đồ &amp; bảng lấy trực tiếp từ kết quả thật</p>
   </header>
 
   <main>
@@ -71,58 +71,129 @@
       </div>
     </section>
 
-    <section class="panel" id="training">
-      <h2>3. Minh họa quá trình huấn luyện</h2>
-      <div class="controls">
-        <label><input type="checkbox" class="series-toggle" data-series="DQN" checked /> DQN</label>
-        <label><input type="checkbox" class="series-toggle" data-series="REINFORCE" checked /> Policy Gradient</label>
-        <label><input type="checkbox" class="series-toggle" data-series="Actor-Critic" checked /> Actor-Critic</label>
-        <label class="raw-toggle"><input type="checkbox" id="show-raw" /> Hiện reward thô (mờ, chưa lọc)</label>
+    <section class="panel" id="improvements">
+      <h2>3. Cải tiến áp dụng lên từng thuật toán</h2>
+      <p class="subtitle" style="margin-bottom:14px;">Mỗi cải tiến nhắm thẳng vào điểm yếu quan sát được ở baseline — xem chi tiết lý thuyết trong <code>docs/improved/01_system_overview.md</code>.</p>
+      <div class="improve-grid">
+        <div class="improve-card" style="border-left:4px solid var(--accent-dqn)">
+          <h3>Double DQN</h3>
+          <p>Tách việc <em>chọn</em> hành động (mạng online) khỏi việc <em>đánh giá</em> hành động (mạng target) để giảm overestimation bias.</p>
+          <div class="from-to">Điểm yếu: <strong>chưa hội tụ trong 400 episode</strong></div>
+        </div>
+        <div class="improve-card" style="border-left:4px solid var(--accent-pg)">
+          <h3>REINFORCE + Baseline + Entropy</h3>
+          <p>Thêm mạng giá trị làm baseline trừ khỏi return (giảm variance) và entropy bonus (giữ khám phá, tránh hội tụ quá sớm rồi sụp đổ).</p>
+          <div class="from-to">Điểm yếu: <strong>hội tụ sớm rồi thoái lui</strong></div>
+        </div>
+        <div class="improve-card" style="border-left:4px solid var(--accent-ac)">
+          <h3>Actor-Critic + GAE</h3>
+          <p>Thay advantage 1-bước bằng GAE(λ=0.95) — cân bằng bias/variance tốt hơn — cộng entropy bonus và gradient clipping.</p>
+          <div class="from-to">Điểm yếu: <strong>ổn định nhưng hội tụ chậm nhất</strong></div>
+        </div>
       </div>
-
-      <div class="playback-bar">
-        <button id="play-btn" class="play-btn" type="button" aria-label="Phát">▶</button>
-        <button id="reset-btn" class="reset-btn" type="button" aria-label="Về đầu">⟲</button>
-        <input type="range" id="episode-slider" min="0" max="0" value="0" step="1" />
-        <span id="episode-label" class="episode-label">episode 0</span>
-        <select id="speed-select">
-          <option value="4">0.5×</option>
-          <option value="2" selected>1×</option>
-          <option value="1">2×</option>
-          <option value="0.4">5×</option>
-        </select>
-      </div>
-
-      <div class="live-stats" id="live-stats"></div>
-
-      <canvas id="reward-chart" width="1000" height="440"></canvas>
-      <p id="chart-status" class="status-msg"></p>
     </section>
 
-    <section class="panel" id="metrics">
-      <h2>4. Bảng chỉ số đánh giá</h2>
-      <div class="table-wrap">
-        <table id="metrics-table">
-          <thead>
-            <tr>
-              <th>Thuật toán</th>
-              <th>Nhóm</th>
-              <th>Episode hội tụ<br /><small>(moving-avg ≥ 195)</small></th>
-              <th>Số bước env<br />để hội tụ</th>
-              <th>Reward TB<br />(20 ep cuối)</th>
-              <th>Độ lệch chuẩn<br />(20 ep cuối)</th>
-              <th>Reward tốt nhất</th>
-              <th>Thời gian train (s)</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
+    <section class="panel" id="training">
+      <h2>4. Minh họa &amp; so sánh quá trình huấn luyện</h2>
+
+      <div class="tabbar" role="tablist">
+        <button class="tab-btn active" data-tab="baseline-tab" type="button">So sánh Baseline</button>
+        <button class="tab-btn" data-tab="improved-tab" type="button">So sánh Improved</button>
+        <button class="tab-btn" data-tab="compare-tab" type="button">Trước / Sau theo thuật toán</button>
+      </div>
+
+      <!-- TAB 1: baseline 3-way -->
+      <div class="tab-panel active" id="baseline-tab" data-variant="baseline">
+        <div class="controls">
+          <label><input type="checkbox" class="series-toggle" data-series="DQN" checked /> DQN</label>
+          <label><input type="checkbox" class="series-toggle" data-series="REINFORCE" checked /> Policy Gradient</label>
+          <label><input type="checkbox" class="series-toggle" data-series="Actor-Critic" checked /> Actor-Critic</label>
+          <label class="raw-toggle"><input type="checkbox" class="show-raw" /> Hiện reward thô (mờ, chưa lọc)</label>
+        </div>
+        <div class="playback-bar">
+          <button class="play-btn" type="button" aria-label="Phát">▶</button>
+          <button class="reset-btn" type="button" aria-label="Về đầu">⟲</button>
+          <input type="range" class="episode-slider" min="0" max="0" value="0" step="1" />
+          <span class="episode-label">episode 0</span>
+          <select class="speed-select">
+            <option value="4">0.5×</option>
+            <option value="2" selected>1×</option>
+            <option value="1">2×</option>
+            <option value="0.4">5×</option>
+          </select>
+        </div>
+        <div class="live-stats"></div>
+        <canvas class="reward-chart" width="1000" height="440"></canvas>
+        <p class="status-msg"></p>
+        <div class="table-wrap">
+          <table class="metrics-table">
+            <thead>
+              <tr>
+                <th>Thuật toán</th>
+                <th>Tỷ lệ hội tụ<br /><small>(trong 5 seed)</small></th>
+                <th>Episode hội tụ<br /><small>(mean, seed đã hội tụ)</small></th>
+                <th>Số bước env<br />để hội tụ (mean)</th>
+                <th>Reward TB<br />(20 ep cuối, mean±std)</th>
+                <th>Reward tốt nhất<br />(mean)</th>
+                <th>Thời gian train (s)<br />(mean)</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TAB 2: improved 3-way -->
+      <div class="tab-panel" id="improved-tab" data-variant="improved">
+        <div class="controls">
+          <label><input type="checkbox" class="series-toggle" data-series="DQN" checked /> Double DQN</label>
+          <label><input type="checkbox" class="series-toggle" data-series="REINFORCE" checked /> REINFORCE+Baseline+Entropy</label>
+          <label><input type="checkbox" class="series-toggle" data-series="Actor-Critic" checked /> Actor-Critic+GAE</label>
+          <label class="raw-toggle"><input type="checkbox" class="show-raw" /> Hiện reward thô (mờ, chưa lọc)</label>
+        </div>
+        <div class="playback-bar">
+          <button class="play-btn" type="button" aria-label="Phát">▶</button>
+          <button class="reset-btn" type="button" aria-label="Về đầu">⟲</button>
+          <input type="range" class="episode-slider" min="0" max="0" value="0" step="1" />
+          <span class="episode-label">episode 0</span>
+          <select class="speed-select">
+            <option value="4">0.5×</option>
+            <option value="2" selected>1×</option>
+            <option value="1">2×</option>
+            <option value="0.4">5×</option>
+          </select>
+        </div>
+        <div class="live-stats"></div>
+        <canvas class="reward-chart" width="1000" height="440"></canvas>
+        <p class="status-msg"></p>
+        <div class="table-wrap">
+          <table class="metrics-table">
+            <thead>
+              <tr>
+                <th>Thuật toán</th>
+                <th>Tỷ lệ hội tụ<br /><small>(trong 5 seed)</small></th>
+                <th>Episode hội tụ<br /><small>(mean, seed đã hội tụ)</small></th>
+                <th>Số bước env<br />để hội tụ (mean)</th>
+                <th>Reward TB<br />(20 ep cuối, mean±std)</th>
+                <th>Reward tốt nhất<br />(mean)</th>
+                <th>Thời gian train (s)<br />(mean)</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TAB 3: per-algorithm baseline vs improved -->
+      <div class="tab-panel" id="compare-tab">
+        <p class="status-msg" style="margin-bottom:14px;">Mỗi khối bên dưới ghép baseline (nét đứt) và improved (nét liền) của cùng một thuật toán trên cùng một biểu đồ, kèm dải mờ ±1 std giữa 5 seed.</p>
+        <div id="compare-blocks"></div>
       </div>
     </section>
   </main>
 
   <footer>
-    <p>Dữ liệu tại <code>frontend/data/results.json</code>, sinh bởi <code>backend/train.py</code>. Xem chi tiết trong thư mục <code>docs/</code>.</p>
+    <p>Dữ liệu tại <code>frontend/data/results.json</code>, sinh bởi <code>backend/train_all.py</code> (5 seed/cấu hình). Xem chi tiết trong <code>docs/baseline/</code> và <code>docs/improved/</code>.</p>
   </footer>
 
   <script src="app.js"></script>
