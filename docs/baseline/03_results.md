@@ -1,97 +1,77 @@
 # Kết quả thực nghiệm (Baseline, 5 seed)
 
 > Số liệu dưới đây lấy từ `frontend/data/results.json`, sinh bởi
-> `backend/train_all.py`: mỗi thuật toán chạy trên **5 seed** [42, 43, 44, 45,
-> 46] × 400 episode trên `CartPole-v1`, các chỉ số là **trung bình ± độ lệch
-> chuẩn giữa 5 seed** (xem cách đọc ở
+> `backend/train_all.py`: Actor-Critic baseline chạy trên **5 seed** [42, 43,
+> 44, 45, 46] × 400 episode trên `TradingEnv`, các chỉ số là **trung bình ±
+> độ lệch chuẩn giữa 5 seed** (xem cách đọc ở
 > [`02_evaluation_metrics.md`](./02_evaluation_metrics.md)).
 
 ## 1. Bảng chỉ số
 
-| Thuật toán   | Tỷ lệ hội tụ | Episode hội tụ (mean) | Bước env để hội tụ (mean) | Reward TB 20 ep cuối (mean±std) | Reward tốt nhất (mean) | Thời gian train (s, mean) |
-|--------------|:---:|:---:|:---:|:---:|:---:|:---:|
-| DQN          | 4/5 | 358.8 | 30,441 | 206.7 ± 96.6  | 408.4 | 156.2 |
-| REINFORCE    | 4/5 | 205.8 | 15,817 | 137.1 ± 39.6  | 464.8 | 172.3 |
-| Actor-Critic | 2/5 | 369.0 | 18,410 | 154.7 ± 34.2  | 418.6 | 71.3  |
+| Chỉ số | Giá trị |
+|---|---:|
+| Tỷ lệ hội tụ | **5/5** |
+| Episode hội tụ (mean ± std, seed đã hội tụ) | 25.4 ± 7.6 |
+| Bước env để hội tụ (mean) | 5,280 |
+| Reward TB 20 ep cuối (mean ± std qua seed, %) | 0.93 ± 1.89 |
+| Reward tốt nhất (mean, %) | 61.0 |
+| Thời gian train (s, mean) | 342.9 |
 
-("Tỷ lệ hội tụ" = số seed trong 5 seed đạt moving-average 20 episode ≥ 195
-trong 400 episode; "Episode hội tụ" chỉ tính trung bình trên các seed *đã*
-hội tụ.)
+("Tỷ lệ hội tụ" = số seed trong 5 seed đạt moving-average 20 episode ≥ 2.0%
+trong 400 episode.)
 
-## 2. Điều thú vị: kết quả đa-seed khác hẳn lần chạy 1-seed trước đó
+## 2. Điều thú vị nhất: hội tụ cực nhanh, nhưng rồi phần lớn "quên" luôn edge đã học được
 
-Lần chạy baseline đầu tiên (1 seed, xem lịch sử commit) cho thấy DQN **chưa
-từng hội tụ** trong 400 episode. Chạy lại đúng thuật toán, đúng seed 42, đúng
-400 episode trong lần đa-seed này lại cho seed 42 **hội tụ ở episode 337**
-với reward trung bình cuối 384.2. Cùng seed, cùng code, kết quả khác nhau
-đáng kể — đây là một phát hiện kỹ thuật đáng ghi lại, không phải sai số ngẫu
-nhiên nên bỏ qua:
+Đây là phát hiện đáng chú ý nhất của baseline: **cả 5/5 seed đều vượt ngưỡng
+hội tụ rất sớm** (episode 19–39, trung bình 25.4) — Actor-Critic tìm ra tín
+hiệu momentum trong `TradingEnv` gần như ngay lập tức. Nhưng nhìn vào từng
+seed ở cuối quá trình huấn luyện (episode 400):
 
-`train_dqn` dùng `env.action_space.sample()` cho bước khám phá ε-greedy.
-`set_seed()` (trong `backend/common.py`) chỉ seed `random`, `numpy` và
-`torch` — **không** seed action space RNG riêng của Gym, vốn được khởi tạo từ
-entropy hệ thống nếu không gọi `action_space.seed()` tường minh. REINFORCE và
-Actor-Critic không dùng `action_space.sample()` (luôn lấy mẫu từ phân phối
-`torch.distributions.Categorical`, được seed đầy đủ bởi `torch.manual_seed`),
-nên chúng tái lập được tốt hơn giữa các lần chạy. Đây là một giới hạn tái lập
-(reproducibility) thật của cài đặt DQN baseline, được ghi nhận trung thực thay
-vì che giấu — và là một phần lý do khiến DQN có `final_avg_reward_last20` với
-độ lệch chuẩn **giữa các seed** lớn nhất (96.6) trong ba thuật toán.
+| Seed | Episode hội tụ | Reward TB 20 ep cuối | Std 20 ep cuối |
+|---|---:|---:|---:|
+| 42 | 39 | **4.72%** | 8.17 |
+| 43 | 22 | −0.06% | 0.71 |
+| 44 | 19 | **0.00%** | **0.00** |
+| 45 | 19 | **0.00%** | **0.00** |
+| 46 | 28 | **0.00%** | **0.00** |
 
-## 3. Đọc kết quả theo từng thuật toán
+4/5 seed kết thúc với reward trung bình đúng **0.00%** và **độ lệch chuẩn
+đúng 0** — nghĩa là chính sách đã suy biến hoàn toàn về **Hold liên tục**
+(không giao dịch gì nữa). Chỉ seed 42 giữ được chính sách còn hoạt động
+(std 8.17) và kết thúc có lãi (4.72%).
 
-### DQN: hội tụ được (4/5 seed) nhưng dao động mạnh giữa các lần chạy
+Đây không phải một chỉ số tệ theo nghĩa "chưa học được" — ngược lại, baseline
+học *rất* nhanh (hội tụ ở episode ~25, sớm hơn nhiều so với các thí nghiệm
+CartPole trước đó). Vấn đề là baseline **không có entropy bonus**: một khi
+chính sách ngẫu nhiên (softmax) dần trở nên gần như xác định (peaked), và nếu
+nó "chốt" vào đúng góc Hold (phần thưởng luôn bằng 0, không có phí giao dịch,
+không rủi ro) thì gradient tại đó gần như triệt tiêu — không có tín hiệu nào
+kéo chính sách ra khỏi điểm an toàn tuyệt đối này nữa. Đây chính xác là vấn
+đề mà GAE + entropy bonus ở bản improved nhắm tới (xem
+[`docs/improved/03_results.md`](../improved/03_results.md)).
 
-Không như ấn tượng "chưa bao giờ hội tụ" từ lần chạy 1-seed, trên 5 seed DQN
-thực ra hội tụ ở 4/5 lần, chỉ seed 45 không hội tụ (final avg 109.3). Nhưng
-`final_avg_reward_last20` dao động từ 109 đến 384 tùy seed — độ lệch chuẩn
-96.6 là cao nhất trong ba thuật toán, phản ánh cả tính bất ổn định vốn có của
-Q-learning bootstrapping lẫn vấn đề reproducibility ở mục 2.
+## 3. Vì sao thời gian train của baseline lâu hơn GAE dù cùng ngân sách episode?
 
-### REINFORCE: hội tụ nhanh nhất, nhưng vẫn giữ đặc tính "học rồi có thể quên"
-
-REINFORCE hội tụ sớm nhất trong ba thuật toán (trung bình episode 205.8,
-tương đương ít hơn ~15,800 bước môi trường) — đúng như quan sát ở lần chạy
-1-seed đầu tiên. `final_std_reward_last20` trung bình 36.1 không phải cao
-nhất, nhưng đây là trung bình *trong từng seed* — chưa nói lên việc một số
-seed có thể đã đạt đỉnh cao hơn rồi tụt lại trước khi kết thúc 400 episode
-(hiện tượng đã thấy rõ ở seed 42 của lần chạy đơn: hội tụ ở ep 236 rồi giảm
-còn 81.6). Đây chính xác là vấn đề mà bản improved
-([`docs/improved/`](../improved/01_system_overview.md)) nhắm tới.
-
-### Actor-Critic: tỷ lệ hội tụ thấp nhất (2/5) nhưng rẻ nhất về thời gian
-
-Actor-Critic baseline chỉ hội tụ ở 2/5 seed trong ngân sách 400 episode —
-thấp nhất trong ba thuật toán ở lần chạy đa-seed này — dù từng hội tụ ở seed
-42 trong lần chạy đơn. Advantage 1-bước (bias cao, variance thấp) khiến tốc
-độ học phụ thuộc nhiều vào việc Critic học đúng V(s) đủ sớm; với một số seed,
-Critic học chậm hơn khiến Actor không có tín hiệu tốt kịp thời. Điểm cộng rõ
-rệt: **thời gian huấn luyện thấp nhất hẳn** (71.3s so với ~156-172s của DQN/
-REINFORCE) vì cập nhật online mỗi bước, không cần Replay Buffer hay đợi hết
-episode mới update.
+Baseline cập nhật **online sau mỗi bước** (200 lần gọi optimizer/episode),
+trong khi GAE thu thập trọn episode rồi mới cập nhật **1 lần**/episode. Nhiều
+lần gọi optimizer hơn khiến baseline chậm hơn về wall-clock (342.9s so với
+230.0s của GAE) dù cùng 400 episode — một chi phí tính toán thực tế của cách
+cập nhật 1-bước, độc lập với chất lượng chính sách học được.
 
 ## 4. Kết luận baseline
 
-Không thuật toán baseline nào thắng tuyệt đối:
-
-| Tiêu chí                        | Thắng          |
-|-----------------------------------|-----------------|
-| Tỷ lệ hội tụ cao nhất              | DQN & REINFORCE (4/5, hòa) |
-| Hội tụ nhanh nhất (episode)        | REINFORCE (205.8) |
-| Rẻ nhất về thời gian tính toán     | Actor-Critic (71.3s) |
-| Ổn định nhất giữa các seed (std thấp nhất) | Actor-Critic (final_avg std 34.2) |
-
-Đây là điểm xuất phát cho các cải tiến ở
-[`docs/improved/03_results.md`](../improved/03_results.md) — mỗi cải tiến
-nhắm đúng điểm yếu quan sát được ở đây, và kết quả sau cải tiến không phải
-lúc nào cũng tốt hơn theo mọi tiêu chí (xem phân tích Double DQN ở đó).
+Actor-Critic baseline (advantage 1-bước, không entropy) học nhanh nhưng
+**không ổn định lâu dài**: dễ tìm ra edge ban đầu, nhưng dễ suy biến về chính
+sách trung lập tuyệt đối (Hold) sau đó vì thiếu áp lực giữ khám phá. Đây là
+điểm xuất phát cho cải tiến GAE + entropy ở
+[`docs/improved/03_results.md`](../improved/03_results.md).
 
 ## 5. Giới hạn
 
 - 5 seed đã tốt hơn nhiều so với 1, nhưng vẫn là cỡ mẫu nhỏ theo chuẩn nghiên
   cứu RL (thường dùng ≥10-30 seed cho kết luận thống kê chặt).
-- DQN baseline có vấn đề reproducibility đã nêu ở mục 2 — nên hiểu độ lệch
-  chuẩn giữa seed của DQN gồm cả biến thiên thuật toán lẫn biến thiên do
-  action-space RNG chưa được seed.
-- Hyperparameter dùng chung giữa ba thuật toán để so sánh công bằng, chưa
-  tinh chỉnh riêng cho từng thuật toán.
+- `TradingEnv` là môi trường tổng hợp (AR(1) log-return), không phải dữ liệu
+  thị trường thật — dùng để minh họa sự khác biệt thuật toán, không phải để
+  đánh giá một chiến lược giao dịch thực tế.
+- Hyperparameter dùng chung giữa baseline và improved để so sánh công bằng,
+  chưa tinh chỉnh riêng cho từng phiên bản.

@@ -2,3 +2,5 @@ __pycache__/
 *.pyc
 .venv/
 .claude/
+backend/train_all.log
+backend/train_all.err.log
