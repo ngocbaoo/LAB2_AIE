@@ -1,2 +1,6 @@
 torch>=2.0
 numpy>=1.24
+
+# chi can cho backend/fetch_data.py (tai du lieu gia SPY 1 lan) -- khong can
+# de train, vi trading_env.py doc thang tu backend/data/spy.csv (CSV tinh)
+yfinance>=0.2

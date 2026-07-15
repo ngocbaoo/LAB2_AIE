@@ -1,9 +1,8 @@
 """
-Trains both Actor-Critic runs -- baseline (1-step advantage) AND improved
-(GAE(lambda=0.95)) -- on TradingEnv (backend/trading_env.py, a synthetic
-trading-strategy problem: Sell/Hold/Buy against a momentum-driven synthetic
-price series), across multiple seeds, then exports one combined JSON
-consumed by the frontend and by docs/baseline/ + docs/improved/.
+Trains Actor-Critic (1-step advantage) on TradingEnv (backend/trading_env.py,
+a trading strategy problem: Sell/Hold/Buy against real SPY daily close
+prices, 2015-2024, cached in backend/data/spy.csv), across multiple seeds,
+then exports one JSON consumed by the frontend and by docs/baseline/.
 
 Run:  py -3.11 train_all.py
 """
@@ -14,7 +13,6 @@ import time
 import numpy as np
 
 from algorithms.actor_critic import train_actor_critic
-from algorithms.actor_critic_gae import train_actor_critic_gae
 
 N_EPISODES = 400
 SEEDS = [42, 43, 44, 45, 46]
@@ -26,7 +24,6 @@ OUT_PATH = os.path.join(os.path.dirname(__file__), "..", "frontend", "data", "re
 # (key, family, variant, label, train_fn)
 RUN_SPECS = [
     ("Actor-Critic", "actor-critic", "baseline", "Actor-Critic (Baseline)", train_actor_critic),
-    ("Actor-Critic", "actor-critic", "improved", "Actor-Critic + GAE", train_actor_critic_gae),
 ]
 
 
@@ -106,7 +103,7 @@ def run_all():
     runs = [run_one(*spec) for spec in RUN_SPECS]
 
     payload = {
-        "environment": "TradingEnv (synthetic GBM, window=10, episode_len=200)",
+        "environment": "TradingEnv (real SPY daily close, 2015-2024, window=10, episode_len=200)",
         "n_episodes": N_EPISODES,
         "seeds": SEEDS,
         "solved_threshold": SOLVED_THRESHOLD,

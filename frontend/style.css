@@ -84,6 +84,33 @@ main { max-width: 1160px; margin: 0 auto; padding: 0 24px 48px; }
   box-shadow: 0 1px 2px rgba(20, 30, 60, 0.04);
 }
 .panel h2 { margin-top: 0; font-size: 1.25rem; }
+.section-intro { color: var(--muted); margin-top: -6px; }
+
+.tldr { background: var(--tag-value-bg); border-color: var(--accent-ac); }
+.tldr-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+.tldr-item p { margin: 4px 0 0; }
+.tldr-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent-ac);
+}
+
+details { margin-top: 10px; font-size: 0.85rem; color: var(--muted); }
+details summary { cursor: pointer; font-weight: 600; color: var(--text); }
+details p { margin: 8px 0 0; }
+
+.chart-hint { color: var(--muted); font-size: 0.82rem; margin-top: -6px; }
+
+.takeaway { border-left: 4px solid var(--accent-ac); }
+.takeaway ul { margin: 0; padding-left: 20px; }
+.takeaway li { margin-bottom: 10px; line-height: 1.6; }
+.takeaway-more { color: var(--muted); font-size: 0.85rem; margin-bottom: 0; }
 
 .ac-explain { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; }
 .ac-diagram { flex: 0 0 300px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
@@ -102,22 +129,6 @@ main { max-width: 1160px; margin: 0 auto; padding: 0 24px 48px; }
 .actor-box { border-left: 4px solid var(--accent-ac); }
 .critic-box { border-left: 4px solid var(--accent-pg); }
 .ac-arrows { font-size: 0.75rem; color: var(--muted); text-align: center; }
-
-.improve-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 14px;
-}
-.improve-card {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 16px 18px;
-  background: var(--bg);
-}
-.improve-card h3 { margin: 0 0 8px; font-size: 1rem; }
-.improve-card p { margin: 0; color: var(--muted); font-size: 0.9rem; }
-.improve-card .from-to { font-size: 0.8rem; color: var(--muted); margin-top: 8px; }
-.improve-card .from-to strong { color: var(--text); }
 
 .controls {
   display: flex;

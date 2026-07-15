@@ -28,23 +28,56 @@ from common import set_seed, RewardTracker
 from trading_env import TradingEnv
 
 
-class ActorCriticNetwork(nn.Module):
-    """Shared trunk with two heads: the Actor (policy) and the Critic (value)."""
+class Actor(nn.Module):
+    """pi(a|s): outputs a categorical action distribution over Sell/Hold/Buy."""
 
     def __init__(self, obs_dim: int, n_actions: int, hidden: int = 128):
         super().__init__()
-        self.trunk = nn.Sequential(
+        self.net = nn.Sequential(
             nn.Linear(obs_dim, hidden),
             nn.ReLU(),
+            nn.Linear(hidden, n_actions),
         )
-        self.actor_head = nn.Linear(hidden, n_actions)
-        self.critic_head = nn.Linear(hidden, 1)
 
     def forward(self, x):
-        features = self.trunk(x)
-        action_probs = torch.softmax(self.actor_head(features), dim=-1)
-        state_value = self.critic_head(features)
-        return action_probs, state_value
+        logits = self.net(x)
+        return torch.softmax(logits, dim=-1)
+
+
+class Critic(nn.Module):
+    """V(s): scores how good the current state (recent returns + position) is."""
+
+    def __init__(self, obs_dim: int, hidden: int = 128):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(obs_dim, hidden),
+            nn.ReLU(),
+            nn.Linear(hidden, 1),
+        )
+
+    def forward(self, x):
+        return self.net(x).squeeze(-1)
+
+
+def build_networks(obs_dim: int, n_actions: int, hidden: int = 128):
+    """Builds the Actor (policy) and Critic (state-value) networks."""
+    actor = Actor(obs_dim, n_actions, hidden)
+    critic = Critic(obs_dim, hidden)
+    return actor, critic
+
+
+def custom_loss(log_prob: torch.Tensor, advantage: torch.Tensor, value: torch.Tensor,
+                 target: torch.Tensor, value_coef: float = 0.5):
+    """Actor-Critic loss = policy log-likelihood weighted by Advantage + Critic's value error.
+
+        actor_loss  = -log(pi(a|s)) * A          (A = target - V(s), detached: Actor doesn't
+                                                    backprop through the Critic's own error)
+        critic_loss = (target - V(s))^2           (Critic learns to predict the TD target)
+        loss        = actor_loss + value_coef * critic_loss
+    """
+    actor_loss = -log_prob * advantage.detach()
+    critic_loss = (target - value).pow(2)
+    return actor_loss + value_coef * critic_loss
 
 
 def train_actor_critic(
@@ -60,8 +93,9 @@ def train_actor_critic(
     n_actions = env.n_actions
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    net = ActorCriticNetwork(obs_dim, n_actions).to(device)
-    optimizer = optim.Adam(net.parameters(), lr=lr)
+    actor, critic = build_networks(obs_dim, n_actions)
+    actor, critic = actor.to(device), critic.to(device)
+    optimizer = optim.Adam(list(actor.parameters()) + list(critic.parameters()), lr=lr)
     tracker = RewardTracker()
 
     for episode in range(n_episodes):
@@ -71,7 +105,8 @@ def train_actor_critic(
 
         while not done:
             state_t = torch.tensor(state, dtype=torch.float32, device=device)
-            probs, value = net(state_t)
+            probs = actor(state_t)
+            value = critic(state_t)
             dist = Categorical(probs)
             action = dist.sample()
 
@@ -79,14 +114,11 @@ def train_actor_critic(
             ep_reward += reward
 
             with torch.no_grad():
-                _, next_value = net(torch.tensor(next_state, dtype=torch.float32, device=device))
-                target = reward + gamma * next_value.squeeze() * (1 - float(done))
+                next_value = critic(torch.tensor(next_state, dtype=torch.float32, device=device))
+                target = reward + gamma * next_value * (1 - float(done))
 
-            advantage = target - value.squeeze()
-
-            actor_loss = -dist.log_prob(action) * advantage.detach()
-            critic_loss = advantage.pow(2)
-            loss = actor_loss + value_coef * critic_loss
+            advantage = target - value
+            loss = custom_loss(dist.log_prob(action), advantage, value, target, value_coef)
 
             optimizer.zero_grad()
             loss.backward()

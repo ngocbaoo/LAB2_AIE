@@ -9,59 +9,70 @@
 <body>
   <header class="page-header">
     <h1>Actor-Critic (A2C) cho tối ưu chiến lược giao dịch</h1>
-    <p class="subtitle">Môi trường: <code>TradingEnv</code> — giá tổng hợp có momentum, hành động Sell/Hold/Buy, phần thưởng là % lãi/lỗ mỗi bước — huấn luyện trên 5 seed, biểu đồ &amp; bảng lấy trực tiếp từ kết quả thật</p>
+    <p class="subtitle">Một AI tự học cách giao dịch (Mua / Bán / Giữ) trên dữ liệu giá thật (SPY, 2015–2024) — huấn luyện 5 lần độc lập (5 seed) để kết quả đáng tin cậy, không phải "ăn may" một lần chạy</p>
   </header>
 
   <main>
-    <section class="panel" id="actor-critic">
-      <h2>1. Actor-Critic: Actor chọn hành động, Critic đánh giá</h2>
-      <div class="ac-explain">
-        <div class="ac-diagram" aria-hidden="true">
-          <div class="ac-box env-box">Thị trường<br /><small>state s (cửa sổ giá), reward r (lãi/lỗ)</small></div>
-          <div class="ac-arrows">
-            <div class="arrow down">s</div>
-          </div>
-          <div class="ac-pair">
-            <div class="ac-box actor-box">
-              <strong>Actor</strong>
-              <small>π(a|s; θ)</small>
-              <p>Chọn vị thế a (Sell/Hold/Buy)</p>
-            </div>
-            <div class="ac-box critic-box">
-              <strong>Critic</strong>
-              <small>V(s; w)</small>
-              <p>Đánh giá trạng thái thị trường</p>
-            </div>
-          </div>
-          <div class="ac-arrows">
-            <div class="arrow up">advantage = r + γV(s') − V(s)</div>
-          </div>
+    <section class="panel tldr" id="tldr">
+      <h2>Tóm tắt trong 30 giây</h2>
+      <div class="tldr-grid">
+        <div class="tldr-item">
+          <div class="tldr-label">Bài toán</div>
+          <p>Dạy một AI quyết định <strong>Mua / Giữ / Bán</strong> mỗi bước thời gian, sao cho tổng lãi (%) cuối cùng cao nhất.</p>
         </div>
-        <div class="ac-text">
-          <p><strong>Actor</strong> xuất ra xác suất đặt vị thế π(a|s) và được cập nhật theo hướng tăng log-xác suất của vị thế mang lại lãi tốt (log-likelihood × advantage).</p>
-          <p><strong>Critic</strong> học hàm giá trị trạng thái <strong>V(s)</strong> để ước lượng ngay lập tức "vị thế vừa đặt tốt hơn hay tệ hơn kỳ vọng?" — gọi là <strong>advantage</strong>.</p>
-          <p>Nhờ Critic cung cấp tín hiệu advantage sau <em>từng bước</em> thay vì phải đợi hết episode, Actor-Critic học ổn định hơn và cần ít episode hơn để hội tụ so với policy gradient thuần.</p>
+        <div class="tldr-item">
+          <div class="tldr-label">Mô hình</div>
+          <p><strong>Actor-Critic</strong>: 1 hệ thống gồm 2 mạng — <strong>Actor</strong> ra quyết định, <strong>Critic</strong> chấm điểm quyết định đó ngay lập tức để Actor học nhanh hơn.</p>
+        </div>
+        <div class="tldr-item">
+          <div class="tldr-label">Dữ liệu</div>
+          <p>Huấn luyện trên <strong>giá đóng cửa thật của SPY</strong> (ETF theo dõi S&amp;P 500), 2015–2024 — không phải dữ liệu giả lập.</p>
         </div>
       </div>
     </section>
 
-    <section class="panel" id="improvements">
-      <h2>2. Cải tiến: GAE (Generalized Advantage Estimation)</h2>
-      <div class="improve-grid">
-        <div class="improve-card" style="border-left:4px solid var(--accent-ac)">
-          <h3>Actor-Critic + GAE(λ=0.95)</h3>
-          <p>Baseline dùng advantage 1-bước (bias cao, variance thấp): <code>δ_t = r_t + γV(s_{t+1}) − V(s_t)</code>. GAE nội suy giữa advantage 1-bước và return Monte-Carlo đầy đủ bằng một tham số λ: <code>A_t = δ_t + (γλ)δ_{t+1} + (γλ)²δ_{t+2} + ...</code> — cân bằng bias/variance tốt hơn, cộng thêm entropy bonus và gradient clipping để giữ khám phá và tránh update quá đà.</p>
-          <div class="from-to">Điểm yếu nhắm tới: <strong>advantage 1-bước quá thiên vị vào Critic còn đang học</strong></div>
+    <section class="panel" id="actor-critic">
+      <h2>1. Actor-Critic hoạt động như thế nào?</h2>
+      <p class="section-intro">Hãy tưởng tượng một <strong>nhà giao dịch (Actor)</strong> làm việc cùng một <strong>cố vấn (Critic)</strong> đứng sau lưng. Nhà giao dịch nhìn biến động giá gần đây rồi ra quyết định; cố vấn ngay lập tức chấm điểm "quyết định đó tốt hơn hay tệ hơn bình thường?" để nhà giao dịch điều chỉnh dần cho đúng.</p>
+      <div class="ac-explain">
+        <div class="ac-diagram" aria-hidden="true">
+          <div class="ac-box env-box">📈 Thị trường<br /><small>giá gần đây + đang cầm vị thế gì</small></div>
+          <div class="ac-arrows">
+            <div class="arrow down">quan sát</div>
+          </div>
+          <div class="ac-pair">
+            <div class="ac-box actor-box">
+              <strong>🧑‍💼 Actor</strong>
+              <small>"nhà giao dịch"</small>
+              <p>Quyết định Mua / Giữ / Bán</p>
+            </div>
+            <div class="ac-box critic-box">
+              <strong>🧑‍🏫 Critic</strong>
+              <small>"cố vấn"</small>
+              <p>Chấm điểm quyết định vừa rồi</p>
+            </div>
+          </div>
+          <div class="ac-arrows">
+            <div class="arrow up">điểm advantage: "tốt hơn/tệ hơn kỳ vọng bao nhiêu?"</div>
+          </div>
+        </div>
+        <div class="ac-text">
+          <p><strong>Actor</strong> học bằng cách: quyết định nào được Critic chấm điểm cao thì lần sau càng ưu tiên chọn lại.</p>
+          <p><strong>Critic</strong> học cách chấm điểm chính xác hơn theo thời gian, bằng cách so sánh điểm mình dự đoán với kết quả thực tế xảy ra.</p>
+          <p>Vì Critic chấm điểm <em>ngay sau từng quyết định</em> (không cần đợi hết cả quá trình giao dịch mới biết đúng/sai), Actor-Critic học nhanh và ổn định hơn so với việc chỉ nhìn kết quả cuối cùng.</p>
+          <details>
+            <summary>Chi tiết kỹ thuật (công thức)</summary>
+            <p>Actor xuất phân phối xác suất hành động π(a|s); Critic học hàm giá trị trạng thái V(s). Tín hiệu "advantage" = r + γV(s′) − V(s), dùng để nhân với log-xác suất hành động khi cập nhật Actor (custom_loss trong <code>backend/algorithms/actor_critic.py</code>).</p>
+          </details>
         </div>
       </div>
     </section>
 
     <section class="panel" id="training">
-      <h2>3. Minh họa &amp; so sánh quá trình huấn luyện: Baseline vs GAE</h2>
+      <h2>2. Xem AI học qua từng episode</h2>
+      <p class="section-intro">Bấm ▶ để xem đường lãi/lỗ trung bình thay đổi qua từng episode huấn luyện, giống như tua lại một video quá trình học. Dải màu mờ xung quanh đường thể hiện mức độ khác biệt giữa 5 lần chạy (5 seed).</p>
       <div class="controls">
-        <label><input type="checkbox" class="series-toggle" data-series="baseline" checked /> Actor-Critic (Baseline)</label>
-        <label><input type="checkbox" class="series-toggle" data-series="improved" checked /> Actor-Critic + GAE</label>
-        <label class="raw-toggle"><input type="checkbox" class="show-raw" /> Hiện reward thô (mờ, chưa lọc)</label>
+        <label class="raw-toggle"><input type="checkbox" class="show-raw" /> Hiện dữ liệu thô (nhiễu, chưa làm mượt)</label>
       </div>
       <div class="playback-bar">
         <button class="play-btn" type="button" aria-label="Phát">▶</button>
@@ -78,27 +89,38 @@
       <div class="live-stats"></div>
       <canvas class="reward-chart" width="1000" height="440"></canvas>
       <p class="status-msg"></p>
+      <p class="chart-hint">Trục dọc = % lãi/lỗ trung bình mỗi episode (trung bình trượt 20 episode gần nhất). Đường chấm chấm ngang là ngưỡng được coi là "đã học tốt".</p>
       <div class="table-wrap">
         <table class="metrics-table">
           <thead>
             <tr>
               <th>Phiên bản</th>
-              <th>Tỷ lệ hội tụ<br /><small>(trong 5 seed)</small></th>
-              <th>Episode hội tụ<br /><small>(mean, seed đã hội tụ)</small></th>
-              <th>Số bước env<br />để hội tụ (mean)</th>
-              <th>Reward TB<br />(20 ep cuối, mean±std, %)</th>
-              <th>Reward tốt nhất<br />(mean, %)</th>
-              <th>Thời gian train (s)<br />(mean)</th>
+              <th>Tỷ lệ học thành công<br /><small>bao nhiêu / 5 lần chạy</small></th>
+              <th>Học nhanh cỡ nào<br /><small>episode cần để "học được"</small></th>
+              <th>Số bước thử nghiệm<br /><small>cần để học được</small></th>
+              <th>Lãi trung bình cuối cùng<br /><small>(% mỗi episode)</small></th>
+              <th>Lãi cao nhất từng đạt<br /><small>(%)</small></th>
+              <th>Thời gian huấn luyện<br /><small>(giây)</small></th>
             </tr>
           </thead>
           <tbody></tbody>
         </table>
       </div>
     </section>
+
+    <section class="panel takeaway" id="takeaway">
+      <h2>3. Kết luận rút ra</h2>
+      <ul>
+        <li><strong>Học nhanh và nhất quán</strong>: cả 5/5 lần chạy (5 seed) đều đạt ngưỡng "học tốt" chỉ sau ~33 episode, và kết thúc với lãi trung bình rất ổn định giữa các seed (~11.2–11.7% mỗi episode, độ lệch chuẩn giữa các seed chỉ 0.16 điểm %).</li>
+        <li><strong>Chính sách không "đóng băng"</strong>: dù không có cơ chế khuyến khích khám phá đặc biệt nào, agent vẫn tiếp tục giao dịch chủ động đến episode cuối cùng thay vì suy biến về "Giữ mãi mãi" — một rủi ro thường gặp của Actor-Critic đơn giản.</li>
+        <li><strong>Vì sao đáng tin</strong>: kết quả không đến từ 1 lần chạy may mắn, mà nhất quán qua 5 seed độc lập trên cùng 1 nguồn dữ liệu giá thật (SPY 2015–2024) — bootstrap ngẫu nhiên các đoạn 200 phiên khác nhau trong lịch sử giá cho mỗi seed.</li>
+      </ul>
+      <p class="takeaway-more">Xem phân tích chi tiết từng seed trong <code>docs/baseline/03_results.md</code>.</p>
+    </section>
   </main>
 
   <footer>
-    <p>Dữ liệu tại <code>frontend/data/results.json</code>, sinh bởi <code>backend/train_all.py</code> (5 seed/cấu hình). Xem chi tiết trong <code>docs/baseline/</code> và <code>docs/improved/</code>.</p>
+    <p>Dữ liệu tại <code>frontend/data/results.json</code>, sinh bởi <code>backend/train_all.py</code> (5 seed, dữ liệu giá SPY thật). Xem chi tiết trong <code>docs/baseline/</code>.</p>
   </footer>
 
   <script src="app.js"></script>

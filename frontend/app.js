@@ -122,7 +122,7 @@ function drawThreshold(ctx, w, h, padding, minY, maxY, threshold) {
   ctx.setLineDash([]);
   ctx.fillStyle = "#8892a6";
   ctx.font = "12px sans-serif";
-  ctx.fillText(`ngưỡng hội tụ (${threshold}%)`, padding.left + 8, y - 6);
+  ctx.fillText(`ngưỡng "học tốt" (${threshold}%)`, padding.left + 8, y - 6);
   ctx.restore();
 }
 
@@ -132,14 +132,12 @@ function fmtMeanStd(obj, decimals = 1) {
   return `${obj.mean.toFixed(decimals)} ± ${obj.std.toFixed(decimals)}`;
 }
 
-// ---------- baseline vs improved playback view (single algorithm) ----------
+// ---------- baseline training playback view ----------
 function buildTrainingView(container) {
-  const runs = DATA.runs; // [baseline, improved]
-  const byVariant = Object.fromEntries(runs.map((r) => [r.variant, r]));
-  const maxFrame = Math.max(...runs.map((r) => r.moving_avg_mean.length)) - 1;
+  const run = DATA.runs[0];
+  const maxFrame = run.moving_avg_mean.length - 1;
 
   const state = {
-    visible: new Set(["baseline", "improved"]),
     showRaw: false,
     frame: maxFrame,
     maxFrame,
@@ -158,23 +156,20 @@ function buildTrainingView(container) {
   const liveStatsEl = container.querySelector(".live-stats");
   const rawToggle = container.querySelector(".show-raw");
 
-  statusEl.textContent = `Môi trường ${DATA.environment} · ${DATA.n_episodes} episodes · ${DATA.seeds.length} seed (${DATA.seeds.join(", ")})`;
+  statusEl.textContent = `Dữ liệu: ${DATA.n_episodes} episode huấn luyện × ${DATA.seeds.length} lần chạy độc lập (seed ${DATA.seeds.join(", ")}) · Môi trường: ${DATA.environment}`;
   slider.max = String(maxFrame);
   slider.value = String(state.frame);
 
   liveStatsEl.innerHTML = "";
-  runs.forEach((run) => {
-    const card = document.createElement("div");
-    card.className = "live-card";
-    card.style.setProperty("--stat-color", COLOR);
-    card.dataset.series = run.variant;
-    card.innerHTML = `
-      <div class="live-name"><span>${run.label}</span><span class="badge-solved" hidden>hội tụ</span></div>
-      <div class="live-reward">—</div>
-      <div class="live-sub">reward moving-avg (mean qua seed, %)</div>
-    `;
-    liveStatsEl.appendChild(card);
-  });
+  const card = document.createElement("div");
+  card.className = "live-card";
+  card.style.setProperty("--stat-color", COLOR);
+  card.innerHTML = `
+    <div class="live-name"><span>${run.label}</span><span class="badge-solved" hidden>✓ đã học tốt</span></div>
+    <div class="live-reward">—</div>
+    <div class="live-sub">lãi/lỗ trung bình lúc này (%, trung bình qua 5 seed)</div>
+  `;
+  liveStatsEl.appendChild(card);
 
   function render() {
     const w = canvas.width;
@@ -184,59 +179,47 @@ function buildTrainingView(container) {
 
     ctx.clearRect(0, 0, w, h);
 
-    const visibleRuns = runs.filter((r) => state.visible.has(r.variant));
     const maxX = state.maxFrame + 1;
-    const highs = runs.flatMap((r) => r.moving_avg_mean.map((v, i) => v + r.moving_avg_std[i]));
-    const lows = runs.flatMap((r) => r.moving_avg_mean.map((v, i) => v - r.moving_avg_std[i]));
+    const highs = run.moving_avg_mean.map((v, i) => v + run.moving_avg_std[i]);
+    const lows = run.moving_avg_mean.map((v, i) => v - run.moving_avg_std[i]);
     const maxY = Math.max(...highs, DATA.solved_threshold, 1) * 1.1;
     const minY = Math.min(...lows, 0) * 1.1;
 
     drawAxes(ctx, padding, w, h, minY, maxY);
     drawThreshold(ctx, w, h, padding, minY, maxY, DATA.solved_threshold);
 
-    visibleRuns.forEach((run) => {
-      const dashed = run.variant === "baseline";
-      const meanSlice = run.moving_avg_mean.slice(0, upto);
-      const stdSlice = run.moving_avg_std.slice(0, upto);
-      plotBand(ctx, meanSlice, stdSlice, COLOR, w, h, padding, maxX, minY, maxY, dashed ? 0.08 : 0.14);
-      if (state.showRaw) {
-        plotLine(ctx, run.rewards_mean.slice(0, upto), COLOR, w, h, padding, maxX, minY, maxY, { alpha: 0.25, dot: false, dashed });
-      }
-      plotLine(ctx, meanSlice, COLOR, w, h, padding, maxX, minY, maxY, { alpha: dashed ? 0.75 : 1, dashed });
-    });
+    const meanSlice = run.moving_avg_mean.slice(0, upto);
+    const stdSlice = run.moving_avg_std.slice(0, upto);
+    plotBand(ctx, meanSlice, stdSlice, COLOR, w, h, padding, maxX, minY, maxY, 0.14);
+    if (state.showRaw) {
+      plotLine(ctx, run.rewards_mean.slice(0, upto), COLOR, w, h, padding, maxX, minY, maxY, { alpha: 0.25, dot: false });
+    }
+    plotLine(ctx, meanSlice, COLOR, w, h, padding, maxX, minY, maxY, { alpha: 1 });
 
     episodeLabel.textContent = `episode ${state.frame} / ${state.maxFrame}`;
 
-    runs.forEach((run) => {
-      const card = liveStatsEl.querySelector(`[data-series="${run.variant}"]`);
-      if (!card) return;
-      const idx = Math.min(state.frame, run.moving_avg_mean.length - 1);
-      card.querySelector(".live-reward").textContent = run.moving_avg_mean[idx].toFixed(1);
-      const solvedMean = run.metrics.solved_at_episode.mean;
-      const solvedNow = solvedMean !== null && idx >= solvedMean;
-      card.querySelector(".badge-solved").hidden = !solvedNow;
-      card.style.opacity = state.visible.has(run.variant) ? "1" : "0.4";
-    });
+    const idx = Math.min(state.frame, run.moving_avg_mean.length - 1);
+    card.querySelector(".live-reward").textContent = run.moving_avg_mean[idx].toFixed(1);
+    const solvedMean = run.metrics.solved_at_episode.mean;
+    const solvedNow = solvedMean !== null && idx >= solvedMean;
+    card.querySelector(".badge-solved").hidden = !solvedNow;
   }
 
   function renderTable() {
     const tbody = container.querySelector(".metrics-table tbody");
     tbody.innerHTML = "";
-    runs.forEach((run) => {
-      const m = run.metrics;
-      const dashed = run.variant === "baseline";
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td><span style="color:${COLOR}; font-weight:600;">${dashed ? "◌" : "●"}</span> ${run.label}</td>
-        <td>${Math.round(m.solved_rate * DATA.seeds.length)}/${DATA.seeds.length}</td>
-        <td>${fmtMeanStd(m.solved_at_episode, 0)}</td>
-        <td>${fmtMeanStd(m.env_steps_to_solve, 0)}</td>
-        <td>${fmtMeanStd(m.final_avg_reward_last20)}</td>
-        <td>${fmtMeanStd(m.best_episode_reward, 0)}</td>
-        <td>${fmtMeanStd(m.training_time_sec)}</td>
-      `;
-      tbody.appendChild(tr);
-    });
+    const m = run.metrics;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><span style="color:${COLOR}; font-weight:600;">●</span> ${run.label}</td>
+      <td>${Math.round(m.solved_rate * DATA.seeds.length)}/${DATA.seeds.length}</td>
+      <td>${fmtMeanStd(m.solved_at_episode, 0)}</td>
+      <td>${fmtMeanStd(m.env_steps_to_solve, 0)}</td>
+      <td>${fmtMeanStd(m.final_avg_reward_last20)}</td>
+      <td>${fmtMeanStd(m.best_episode_reward, 0)}</td>
+      <td>${fmtMeanStd(m.training_time_sec)}</td>
+    `;
+    tbody.appendChild(tr);
   }
 
   function stopPlayback() {
@@ -284,14 +267,6 @@ function buildTrainingView(container) {
       stopPlayback();
       startPlayback();
     }
-  });
-  container.querySelectorAll(".series-toggle").forEach((box) => {
-    box.addEventListener("change", () => {
-      const key = box.dataset.series;
-      if (box.checked) state.visible.add(key);
-      else state.visible.delete(key);
-      render();
-    });
   });
   rawToggle.addEventListener("change", (e) => {
     state.showRaw = e.target.checked;

@@ -1,8 +1,7 @@
 """
-Trains Actor-Critic (baseline and GAE-improved) on TradingEnv (a
-synthetic-price trading-strategy problem, see backend/trading_env.py) with
-the same episode budget and seed -- a quick 1-seed sanity check. The
-authoritative 5-seed data source is train_all.py.
+Trains Actor-Critic (baseline) on TradingEnv (real SPY daily-close
+trading-strategy problem, see backend/trading_env.py) -- a quick 1-seed
+sanity check. The authoritative 5-seed data source is train_all.py.
 
 Run:  py -3.11 train.py
 """
@@ -11,7 +10,6 @@ import os
 import time
 
 from algorithms.actor_critic import train_actor_critic
-from algorithms.actor_critic_gae import train_actor_critic_gae
 
 N_EPISODES = 400
 SEED = 42
@@ -50,7 +48,6 @@ def run_all():
     runs = []
     for label, fn in [
         ("Actor-Critic (Baseline)", train_actor_critic),
-        ("Actor-Critic + GAE", train_actor_critic_gae),
     ]:
         print(f"Training {label} for {N_EPISODES} episodes...")
         start = time.perf_counter()
@@ -62,7 +59,7 @@ def run_all():
         runs.append(summary)
 
     payload = {
-        "environment": "TradingEnv (synthetic GBM, window=10, episode_len=200)",
+        "environment": "TradingEnv (real SPY daily close, 2015-2024, window=10, episode_len=200)",
         "n_episodes": N_EPISODES,
         "seed": SEED,
         "solved_threshold": SOLVED_THRESHOLD,

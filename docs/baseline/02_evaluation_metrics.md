@@ -1,20 +1,19 @@
 # Chỉ số đánh giá
 
-Đánh giá Actor-Critic công bằng giữa baseline và bản cải tiến GAE đòi hỏi
-nhiều hơn một con số "reward cuối cùng" — cập nhật online mỗi bước có thể học
-nhanh nhưng dao động, trong khi cập nhật theo GAE có thể ổn định hơn nhưng
-đánh đổi tốc độ, nên hệ thống theo dõi các chỉ số sau (tính trong
-`backend/train_all.py`, hiển thị ở bảng trong `frontend/index.html`).
+Đánh giá Actor-Critic đòi hỏi nhiều hơn một con số "reward cuối cùng" — cập
+nhật online mỗi bước có thể học nhanh nhưng dao động, nên hệ thống theo dõi
+các chỉ số sau (tính trong `backend/train_all.py`, hiển thị ở bảng trong
+`frontend/index.html`).
 
 ## 0. Vì sao chạy 5 seed thay vì 1?
 
-Một lần chạy duy nhất không phân biệt được "cấu hình này tốt hơn" với "lần
-này may mắn hơn" — nhất là với môi trường nhiễu cao như `TradingEnv`.
-`train_all.py` chạy mỗi cấu hình (baseline, improved) trên **5 seed cố định**
-(42–46) và báo cáo **trung bình ± độ lệch chuẩn giữa các seed** cho mọi chỉ
-số bên dưới, thay vì một con số đơn lẻ. Đường trung bình trên biểu đồ đi kèm
-dải mờ ±1 std để thấy được mức độ dao động giữa các lần chạy, không chỉ dao
-động trong một lần chạy.
+Một lần chạy duy nhất không phân biệt được "học được thật" với "lần này may
+mắn hơn" — nhất là với môi trường nhiễu cao như `TradingEnv`. `train_all.py`
+chạy Actor-Critic trên **5 seed cố định** (42–46), mỗi seed bootstrap một tập
+đoạn giá SPY thật khác nhau, và báo cáo **trung bình ± độ lệch chuẩn giữa các
+seed** cho mọi chỉ số bên dưới, thay vì một con số đơn lẻ. Đường trung bình
+trên biểu đồ đi kèm dải mờ ±1 std để thấy được mức độ dao động giữa các lần
+chạy, không chỉ dao động trong một lần chạy.
 
 ## Chỉ số bổ sung: Tỷ lệ hội tụ (`solved_rate`)
 
@@ -69,10 +68,8 @@ tốt hơn.
 ## 6. Độ lệch chuẩn 20 episode cuối (`final_std_reward_last20`)
 
 Đo **độ ổn định (stability)** của chính sách đã hội tụ. Std thấp = chính sách
-nhất quán; std cao = chính sách còn dao động dù trung bình đã cao. Đây chính
-xác là chỉ số GAE được kỳ vọng cải thiện so với advantage 1-bước — bằng cách
-cân bằng bias/variance tốt hơn, advantage ít nhiễu hơn nên chính sách học
-được ổn định hơn.
+nhất quán qua các episode; std cao (hoặc đúng bằng 0) = chính sách còn dao
+động nhiều, hoặc đã "chốt cứng" vào một hành động duy nhất (suy biến).
 
 ## 7. Reward tốt nhất (`best_episode_reward`)
 
@@ -83,9 +80,8 @@ Giá trị cao nhất từng đạt được trong toàn bộ quá trình huấn
 
 Wall-clock time cho toàn bộ `n_episodes`, cùng phần cứng (đo bằng
 `time.perf_counter()` trong `train_all.py`). Phản ánh **chi phí tính toán
-thực tế**: baseline cập nhật online sau mỗi bước (200 update/episode);
-GAE thu thập trọn 1 episode rồi mới cập nhật 1 lần — ít lần gọi optimizer
-hơn, nhưng thêm chi phí tính GAE lùi (backward) qua toàn bộ chuỗi reward.
+thực tế**: Actor-Critic cập nhật online sau mỗi bước (200 lần gọi
+optimizer/episode), nên chi phí tỷ lệ trực tiếp với số bước huấn luyện.
 
 ## Vì sao dùng từng ấy chỉ số?
 
@@ -98,6 +94,6 @@ hơn, nhưng thêm chi phí tính GAE lùi (backward) qua toàn bộ chuỗi rew
 | Tiềm năng tối đa của chính sách?               | `best_episode_reward`                  |
 | Chi phí tính toán để đạt được điều đó?         | `training_time_sec`                    |
 
-Không có phiên bản nào (baseline hay GAE) thắng tuyệt đối trên mọi chỉ số —
-đó chính là lý do cần nhìn cả bảng thay vì một con số duy nhất. Kết quả cụ
-thể và phân tích ở [`03_results.md`](./03_results.md).
+Không có chỉ số đơn lẻ nào kể hết câu chuyện — đó chính là lý do cần nhìn cả
+bảng thay vì một con số duy nhất. Kết quả cụ thể và phân tích ở
+[`03_results.md`](./03_results.md).
